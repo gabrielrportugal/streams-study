@@ -1,8 +1,7 @@
 import http from 'node:http';
 import { jsonMiddleware } from './middlewares/json.js';
-import { Database } from './database.js';
-
-const database = new Database();
+import { routes } from './routes.js';
+import { extractQueryParams } from './utils/extract-query-params.js';
 
 const server = http.createServer(async (req, res) => {
   const {method, url} = req;
@@ -11,27 +10,22 @@ const server = http.createServer(async (req, res) => {
 
   await jsonMiddleware(req, res);
 
-  if (method === 'GET' && url === '/users') {
-    const users = database.select('users');
+  const route = routes.find(route => {
+    return route.method === method && route.path.test(url)
+  });
+  
+  if (route) {
+    const routeParams = req.url.match(route.path);
 
-    return res.end(JSON.stringify(users))
+    const { query, ...params } = routeParams.groups;
+
+    req.params = params;
+    req.query = query ? extractQueryParams(query) : {};
+
+    return route.handler(req, res);
   }
 
-  if (method === 'POST' && url === '/users') {
-    const {name, email} = req.body;
-
-    const user = {
-      id: 1,
-      name,
-      email,
-    };
-
-    database.insert('users', user);
-
-    return res.writeHead(201).end();
-  }
-
-  return res.writeHead(401).end();
+  return res.writeHead(404).end();
 })
 
 server.listen(3333);
